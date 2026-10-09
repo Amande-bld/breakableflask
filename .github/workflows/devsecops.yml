@@ -20,6 +20,7 @@ jobs:
     needs: Dependances
     steps:
       - uses: actions/checkout@v4
+
       - name: Test Dockerfile
         run: |
           docker run --rm \
@@ -28,6 +29,21 @@ jobs:
             aquasec/trivy:latest config \
             --severity HIGH,CRITICAL \
             /project/Dockerfile
+
+      - name: Build image
+        run: docker build -t imgvulne:1.1 .
+
+      - name: Scan image
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache/trivy":/root/.cache/ \
+            aquasec/trivy:latest image --format json --severity HIGH,CRITICAL imgvulne:1.1 \
+          | jq -r '
+            ["TARGET","PACKAGE","INSTALLED","VULN","SEVERITY"],
+            (.Results[]? as $r | $r.Vulnerabilities[]? | [$r.Target, .PkgName, .InstalledVersion, .VulnerabilityID, .Severity])
+            | @tsv' \
+          | column -t -s $'\t'
 
   Deploy:
     runs-on: ubuntu-latest
